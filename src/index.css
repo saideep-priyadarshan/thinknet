@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* Debug styles for D3 mind map */
+svg .node {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+svg .node circle {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+svg .node text {
+  opacity: 1 !important;
+  visibility: visible !important;
+}

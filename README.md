@@ -47,7 +47,7 @@ Before running this application, make sure you have:
 1. Clone the repository:
 
    ```bash
-   git clone <https://github.com/saideep-priyadarshan/thinknet.git>
+   git clone https://github.com/saideep-priyadarshan/thinknet.git
    cd thinknet
    ```
 

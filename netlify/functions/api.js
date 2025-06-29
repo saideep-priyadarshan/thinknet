@@ -131,8 +131,20 @@ exports.handler = async (event, context) => {
     return createResponse(200, {});
   }
 
-  const path = event.path.replace("/.netlify/functions/api", "");
+  // Get the path and remove the function prefix
+  let path = event.path.replace("/.netlify/functions/api", "");
+
+  // Also handle if the request comes through the redirect from /api/*
+  if (path.startsWith("/api")) {
+    path = path.replace("/api", "");
+  }
+
   const method = event.httpMethod;
+
+  // Debug logging
+  console.log("Original path:", event.path);
+  console.log("Processed path:", path);
+  console.log("Method:", method);
 
   try {
     await connectToDatabase();

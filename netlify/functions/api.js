@@ -1,32 +1,6 @@
-const express = require("express");
 const mongoose = require("mongoose");
-const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const rateLimit = require("express-rate-limit");
-const helmet = require("helmet");
-const serverless = require("serverless-http");
-
-// Initialize Express app
-const app = express();
-
-// Middleware
-app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "*",
-    credentials: true,
-  })
-);
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-});
-app.use("/", limiter);
 
 // MongoDB connection with connection pooling
 let cachedDb = null;
@@ -117,387 +91,307 @@ const MindMapSchema = new mongoose.Schema({
 const User = mongoose.model("User", UserSchema);
 const MindMap = mongoose.model("MindMap", MindMapSchema);
 
-// JWT Authentication Middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
+// JWT Authentication Helper
+const authenticateToken = (authHeader) => {
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ error: "Access token required" });
+    throw new Error("Access token required");
   }
 
-  jwt.verify(
-    token,
-    process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
-    (err, user) => {
-      if (err) {
-        return res.status(403).json({ error: "Invalid token" });
-      }
-      req.user = user;
-      next();
-    }
-  );
+  try {
+    return jwt.verify(
+      token,
+      process.env.JWT_SECRET || process.env.VITE_JWT_SECRET
+    );
+  } catch (err) {
+    throw new Error("Invalid token");
+  }
 };
 
-// Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
-});
+// Helper function to create response
+const createResponse = (statusCode, body, headers = {}) => {
+  return {
+    statusCode,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  };
+};
 
-// Auth Routes
-app.post("/auth/register", async (req, res) => {
-  try {
-    await connectToDatabase();
-
-    const { username, email, password } = req.body;
-
-    // Validation
-    if (!username || !email || !password) {
-      return res.status(400).json({ error: "All fields are required" });
-    }
-
-    if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ error: "Password must be at least 6 characters" });
-    }
-
-    // Check if user exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }],
-    });
-
-    if (existingUser) {
-      return res.status(400).json({ error: "User already exists" });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Create user
-    const user = new User({
-      username,
-      email,
-      password: hashedPassword,
-    });
-
-    await user.save();
-
-    // Generate token
-    const token = jwt.sign(
-      { id: user._id, username: user.username },
-      process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-      },
-    });
-  } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({ error: "Server error" });
+// Main handler
+exports.handler = async (event, context) => {
+  // Handle preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    return createResponse(200, {});
   }
-});
 
-app.post("/auth/login", async (req, res) => {
+  const path = event.path.replace("/.netlify/functions/api", "");
+  const method = event.httpMethod;
+
   try {
     await connectToDatabase();
 
-    const { email, password } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+    // Route: Health Check
+    if (path === "/health" && method === "GET") {
+      return createResponse(200, {
+        status: "OK",
+        timestamp: new Date().toISOString(),
+      });
     }
 
-    // Find user
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ error: "Invalid credentials" });
-    }
+    // Route: Register
+    if (path === "/auth/register" && method === "POST") {
+      const { username, email, password } = JSON.parse(event.body || "{}");
 
-    // Check password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: "Invalid credentials" });
-    }
+      // Validation
+      if (!username || !email || !password) {
+        return createResponse(400, { error: "All fields are required" });
+      }
 
-    // Generate token
-    const token = jwt.sign(
-      { id: user._id, username: user.username },
-      process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+      if (password.length < 6) {
+        return createResponse(400, {
+          error: "Password must be at least 6 characters",
+        });
+      }
 
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar,
-      },
-    });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+      // Check if user exists
+      const existingUser = await User.findOne({
+        $or: [{ email }, { username }],
+      });
 
-// Mind Map Routes
-app.get("/mindmaps", authenticateToken, async (req, res) => {
-  try {
-    await connectToDatabase();
+      if (existingUser) {
+        return createResponse(400, { error: "User already exists" });
+      }
 
-    const mindmaps = await MindMap.find({
-      $or: [
-        { owner: req.user.id },
-        { "collaborators.user": req.user.id },
-        { isPublic: true },
-      ],
-    })
-      .populate("owner", "username avatar")
-      .populate("collaborators.user", "username avatar")
-      .sort({ updatedAt: -1 });
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 12);
 
-    res.json(mindmaps);
-  } catch (error) {
-    console.error("Fetch mindmaps error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+      // Create user
+      const user = new User({
+        username,
+        email,
+        password: hashedPassword,
+      });
 
-app.post("/mindmaps", authenticateToken, async (req, res) => {
-  try {
-    await connectToDatabase();
+      await user.save();
 
-    const { title, description, isPublic, tags } = req.body;
-
-    if (!title) {
-      return res.status(400).json({ error: "Title is required" });
-    }
-
-    const mindmap = new MindMap({
-      title,
-      description: description || "",
-      nodes: [],
-      links: [],
-      comments: new Map(),
-      owner: req.user.id,
-      isPublic: isPublic || false,
-      tags: tags || [],
-      lastModifiedBy: req.user.id,
-    });
-
-    await mindmap.save();
-    await mindmap.populate("owner", "username avatar");
-
-    res.status(201).json(mindmap);
-  } catch (error) {
-    console.error("Create mindmap error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.get("/mindmaps/:id", authenticateToken, async (req, res) => {
-  try {
-    await connectToDatabase();
-
-    const mindmap = await MindMap.findById(req.params.id)
-      .populate("owner", "username avatar")
-      .populate("collaborators.user", "username avatar");
-
-    if (!mindmap) {
-      return res.status(404).json({ error: "Mind map not found" });
-    }
-
-    // Check permissions
-    const hasAccess =
-      mindmap.owner._id.toString() === req.user.id ||
-      mindmap.collaborators.some(
-        (c) => c.user._id.toString() === req.user.id
-      ) ||
-      mindmap.isPublic;
-
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
-    res.json(mindmap);
-  } catch (error) {
-    console.error("Fetch mindmap error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.put("/mindmaps/:id", authenticateToken, async (req, res) => {
-  try {
-    await connectToDatabase();
-
-    const { nodes, links, title, description, isPublic, tags } = req.body;
-
-    const mindmap = await MindMap.findById(req.params.id);
-
-    if (!mindmap) {
-      return res.status(404).json({ error: "Mind map not found" });
-    }
-
-    // Check permissions
-    const hasWriteAccess =
-      mindmap.owner.toString() === req.user.id ||
-      mindmap.collaborators.some(
-        (c) =>
-          c.user.toString() === req.user.id &&
-          (c.permission === "write" || c.permission === "admin")
+      // Generate token
+      const token = jwt.sign(
+        { id: user._id, username: user.username },
+        process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
+        { expiresIn: "7d" }
       );
 
-    if (!hasWriteAccess) {
-      return res.status(403).json({ error: "Write access denied" });
+      return createResponse(201, {
+        token,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          avatar: user.avatar,
+        },
+      });
     }
 
-    // Update fields
-    if (nodes !== undefined) mindmap.nodes = nodes;
-    if (links !== undefined) mindmap.links = links;
-    if (title !== undefined) mindmap.title = title;
-    if (description !== undefined) mindmap.description = description;
-    if (isPublic !== undefined) mindmap.isPublic = isPublic;
-    if (tags !== undefined) mindmap.tags = tags;
+    // Route: Login
+    if (path === "/auth/login" && method === "POST") {
+      const { email, password } = JSON.parse(event.body || "{}");
 
-    mindmap.updatedAt = new Date();
-    mindmap.lastModifiedBy = req.user.id;
-
-    await mindmap.save();
-    await mindmap.populate("owner", "username avatar");
-    await mindmap.populate("collaborators.user", "username avatar");
-
-    res.json(mindmap);
-  } catch (error) {
-    console.error("Update mindmap error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.delete("/mindmaps/:id", authenticateToken, async (req, res) => {
-  try {
-    await connectToDatabase();
-
-    const mindmap = await MindMap.findById(req.params.id);
-
-    if (!mindmap) {
-      return res.status(404).json({ error: "Mind map not found" });
-    }
-
-    // Only owner can delete
-    if (mindmap.owner.toString() !== req.user.id) {
-      return res.status(403).json({ error: "Only owner can delete mind map" });
-    }
-
-    await MindMap.findByIdAndDelete(req.params.id);
-    res.json({ message: "Mind map deleted successfully" });
-  } catch (error) {
-    console.error("Delete mindmap error:", error);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// Comments Routes
-app.post(
-  "/mindmaps/:id/comments/:nodeId",
-  authenticateToken,
-  async (req, res) => {
-    try {
-      await connectToDatabase();
-
-      const { text } = req.body;
-      const { id: mindmapId, nodeId } = req.params;
-
-      if (!text || text.trim() === "") {
-        return res.status(400).json({ error: "Comment text is required" });
+      // Validation
+      if (!email || !password) {
+        return createResponse(400, {
+          error: "Email and password are required",
+        });
       }
 
-      const mindmap = await MindMap.findById(mindmapId);
+      // Find user
+      const user = await User.findOne({ email });
+      if (!user) {
+        return createResponse(400, { error: "Invalid credentials" });
+      }
+
+      // Check password
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return createResponse(400, { error: "Invalid credentials" });
+      }
+
+      // Generate token
+      const token = jwt.sign(
+        { id: user._id, username: user.username },
+        process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
+        { expiresIn: "7d" }
+      );
+
+      return createResponse(200, {
+        token,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          avatar: user.avatar,
+        },
+      });
+    }
+
+    // Route: Get Mindmaps
+    if (path === "/mindmaps" && method === "GET") {
+      const authUser = authenticateToken(event.headers.authorization);
+
+      const mindmaps = await MindMap.find({
+        $or: [
+          { owner: authUser.id },
+          { "collaborators.user": authUser.id },
+          { isPublic: true },
+        ],
+      })
+        .populate("owner", "username avatar")
+        .populate("collaborators.user", "username avatar")
+        .sort({ updatedAt: -1 });
+
+      return createResponse(200, mindmaps);
+    }
+
+    // Route: Create Mindmap
+    if (path === "/mindmaps" && method === "POST") {
+      const authUser = authenticateToken(event.headers.authorization);
+      const { title, description, isPublic, tags } = JSON.parse(
+        event.body || "{}"
+      );
+
+      if (!title) {
+        return createResponse(400, { error: "Title is required" });
+      }
+
+      const mindmap = new MindMap({
+        title,
+        description: description || "",
+        nodes: [],
+        links: [],
+        comments: new Map(),
+        owner: authUser.id,
+        isPublic: isPublic || false,
+        tags: tags || [],
+        lastModifiedBy: authUser.id,
+      });
+
+      await mindmap.save();
+      await mindmap.populate("owner", "username avatar");
+
+      return createResponse(201, mindmap);
+    }
+
+    // Route: Get specific mindmap
+    if (path.match(/^\/mindmaps\/[a-f\d]{24}$/) && method === "GET") {
+      const authUser = authenticateToken(event.headers.authorization);
+      const mindmapId = path.split("/")[2];
+
+      const mindmap = await MindMap.findById(mindmapId)
+        .populate("owner", "username avatar")
+        .populate("collaborators.user", "username avatar");
 
       if (!mindmap) {
-        return res.status(404).json({ error: "Mind map not found" });
+        return createResponse(404, { error: "Mind map not found" });
       }
 
       // Check permissions
       const hasAccess =
-        mindmap.owner.toString() === req.user.id ||
-        mindmap.collaborators.some((c) => c.user.toString() === req.user.id) ||
+        mindmap.owner._id.toString() === authUser.id ||
+        mindmap.collaborators.some(
+          (c) => c.user._id.toString() === authUser.id
+        ) ||
         mindmap.isPublic;
 
       if (!hasAccess) {
-        return res.status(403).json({ error: "Access denied" });
+        return createResponse(403, { error: "Access denied" });
       }
 
-      const user = await User.findById(req.user.id);
-      const comment = {
-        id: Date.now().toString(),
-        text: text.trim(),
-        author: user.username,
-        authorId: req.user.id,
-        timestamp: new Date(),
-      };
+      return createResponse(200, mindmap);
+    }
 
-      if (!mindmap.comments.has(nodeId)) {
-        mindmap.comments.set(nodeId, []);
+    // Route: Update mindmap
+    if (path.match(/^\/mindmaps\/[a-f\d]{24}$/) && method === "PUT") {
+      const authUser = authenticateToken(event.headers.authorization);
+      const mindmapId = path.split("/")[2];
+      const { nodes, links, title, description, isPublic, tags } = JSON.parse(
+        event.body || "{}"
+      );
+
+      const mindmap = await MindMap.findById(mindmapId);
+
+      if (!mindmap) {
+        return createResponse(404, { error: "Mind map not found" });
       }
 
-      const nodeComments = mindmap.comments.get(nodeId);
-      nodeComments.push(comment);
-      mindmap.comments.set(nodeId, nodeComments);
+      // Check permissions
+      const hasWriteAccess =
+        mindmap.owner.toString() === authUser.id ||
+        mindmap.collaborators.some(
+          (c) =>
+            c.user.toString() === authUser.id &&
+            (c.permission === "write" || c.permission === "admin")
+        );
+
+      if (!hasWriteAccess) {
+        return createResponse(403, { error: "Write access denied" });
+      }
+
+      // Update fields
+      if (nodes !== undefined) mindmap.nodes = nodes;
+      if (links !== undefined) mindmap.links = links;
+      if (title !== undefined) mindmap.title = title;
+      if (description !== undefined) mindmap.description = description;
+      if (isPublic !== undefined) mindmap.isPublic = isPublic;
+      if (tags !== undefined) mindmap.tags = tags;
 
       mindmap.updatedAt = new Date();
+      mindmap.lastModifiedBy = authUser.id;
+
       await mindmap.save();
+      await mindmap.populate("owner", "username avatar");
+      await mindmap.populate("collaborators.user", "username avatar");
 
-      res.status(201).json(comment);
-    } catch (error) {
-      console.error("Add comment error:", error);
-      res.status(500).json({ error: "Server error" });
+      return createResponse(200, mindmap);
     }
-  }
-);
 
-app.get(
-  "/mindmaps/:id/comments/:nodeId",
-  authenticateToken,
-  async (req, res) => {
-    try {
-      await connectToDatabase();
-
-      const { id: mindmapId, nodeId } = req.params;
+    // Route: Delete mindmap
+    if (path.match(/^\/mindmaps\/[a-f\d]{24}$/) && method === "DELETE") {
+      const authUser = authenticateToken(event.headers.authorization);
+      const mindmapId = path.split("/")[2];
 
       const mindmap = await MindMap.findById(mindmapId);
 
       if (!mindmap) {
-        return res.status(404).json({ error: "Mind map not found" });
+        return createResponse(404, { error: "Mind map not found" });
       }
 
-      // Check permissions
-      const hasAccess =
-        mindmap.owner.toString() === req.user.id ||
-        mindmap.collaborators.some((c) => c.user.toString() === req.user.id) ||
-        mindmap.isPublic;
-
-      if (!hasAccess) {
-        return res.status(403).json({ error: "Access denied" });
+      // Only owner can delete
+      if (mindmap.owner.toString() !== authUser.id) {
+        return createResponse(403, { error: "Only owner can delete mind map" });
       }
 
-      const comments = mindmap.comments.get(nodeId) || [];
-      res.json(comments);
-    } catch (error) {
-      console.error("Fetch comments error:", error);
-      res.status(500).json({ error: "Server error" });
+      await MindMap.findByIdAndDelete(mindmapId);
+      return createResponse(200, { message: "Mind map deleted successfully" });
     }
-  }
-);
 
-// Export the serverless function
-module.exports.handler = serverless(app);
+    // If no route matches
+    return createResponse(404, { error: "Route not found" });
+  } catch (error) {
+    console.error("API Error:", error);
+
+    if (
+      error.message === "Access token required" ||
+      error.message === "Invalid token"
+    ) {
+      return createResponse(401, { error: error.message });
+    }
+
+    return createResponse(500, { error: "Server error" });
+  }
+};

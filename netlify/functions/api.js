@@ -12,12 +12,10 @@ const app = express();
 
 // Middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "*",
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: process.env.CLIENT_URL || "*",
+  credentials: true,
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -37,15 +35,12 @@ async function connectToDatabase() {
   }
 
   try {
-    const connection = await mongoose.connect(
-      process.env.MONGODB_URI || process.env.VITE_MONGODB_URI,
-      {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-      }
-    );
-
+    const connection = await mongoose.connect(process.env.MONGODB_URI || process.env.VITE_MONGODB_URI, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+    
     cachedDb = connection;
     console.log("✅ Connected to MongoDB successfully");
     return connection;

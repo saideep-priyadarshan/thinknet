@@ -141,11 +141,6 @@ exports.handler = async (event, context) => {
 
   const method = event.httpMethod;
 
-  // Debug logging
-  console.log("Original path:", event.path);
-  console.log("Processed path:", path);
-  console.log("Method:", method);
-
   try {
     await connectToDatabase();
 
@@ -267,7 +262,7 @@ exports.handler = async (event, context) => {
         .populate("collaborators.user", "username avatar")
         .sort({ updatedAt: -1 });
 
-      return createResponse(200, mindmaps);
+      return createResponse(200, { mindmaps });
     }
 
     // Route: Create Mindmap

@@ -8,6 +8,7 @@
     "dev:backend": "node src/thinknet-backend.cjs",
     "dev:full": "concurrently \"npm run dev:backend\" \"npm run dev\"",
     "build": "vite build",
+    "build:netlify": "npm run build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -26,6 +27,7 @@
     "mongoose": "^8.16.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "serverless-http": "^3.2.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"
   },

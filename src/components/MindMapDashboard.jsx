@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -38,7 +38,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
       const response = await mindMapAPI.getAll(params);
       let maps = response.data.mindmaps;
 
-      // Apply filters
       if (filterBy === "owned") {
         maps = maps.filter((map) => map.owner._id === user.id);
       } else if (filterBy === "shared") {
@@ -58,7 +57,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
   };
 
   const deleteMindMap = async (mindMapId, event) => {
-    // Prevent card click event from firing
     event.stopPropagation();
 
     if (
@@ -71,7 +69,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
 
     try {
       await mindMapAPI.delete(mindMapId);
-      // Reload the mind maps list
       loadMindMaps();
     } catch (error) {
       console.error("Failed to delete mind map:", error);
@@ -101,7 +98,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
 
     try {
       await mindMapAPI.update(mindMapId, { title: editingTitle.trim() });
-      // Update the local state
       setMindMaps((prevMaps) =>
         prevMaps.map((map) =>
           map._id === mindMapId ? { ...map, title: editingTitle.trim() } : map
@@ -227,7 +223,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
         )}
       </div>
 
-      {/* Delete button - only show for mind maps owned by current user */}
       {mindMap.owner._id === user.id && (
         <button
           onClick={(e) => deleteMindMap(mindMap._id, e)}
@@ -298,7 +293,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
         ) : (
           <Lock className="w-4 h-4 text-red-400" />
         )}
-        {/* Delete button - only show for mind maps owned by current user */}
         {mindMap.owner._id === user.id && (
           <button
             onClick={(e) => deleteMindMap(mindMap._id, e)}
@@ -314,7 +308,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
       <div className="bg-black/20 backdrop-blur-sm border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -333,7 +326,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Controls */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 space-y-4 md:space-y-0">
           <div className="flex items-center space-x-4">
             <div className="relative">
@@ -390,7 +382,6 @@ const MindMapDashboard = ({ onSelectMindMap, onCreateNew }) => {
           </div>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { authAPI } from "../services/api";
 import socketService from "../services/socket";
 
@@ -18,7 +18,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token on mount
     const savedToken = localStorage.getItem("token");
     const savedUser = localStorage.getItem("user");
 

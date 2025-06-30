@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import * as d3 from "d3";
 
 const D3Test = () => {
@@ -10,7 +10,6 @@ const D3Test = () => {
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    // Simple test
     svg.attr("width", 400).attr("height", 300);
 
     svg

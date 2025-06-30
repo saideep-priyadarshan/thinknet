@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Login from "./components/Login";
 import MindMapDashboard from "./components/MindMapDashboard";
@@ -8,7 +8,7 @@ import "./App.css";
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [currentView, setCurrentView] = useState("dashboard"); // 'dashboard' | 'mindmap'
+  const [currentView, setCurrentView] = useState("dashboard");
   const [selectedMindMapId, setSelectedMindMapId] = useState(null);
 
   if (loading) {

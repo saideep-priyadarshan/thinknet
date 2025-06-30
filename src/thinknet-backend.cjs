@@ -19,7 +19,6 @@ const io = socketIo(server, {
   },
 });
 
-// Middleware
 app.use(helmet());
 app.use(
   cors({
@@ -30,14 +29,12 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
 });
 app.use("/api/", limiter);
 
-// MongoDB connection
 mongoose
   .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/thinknet")
   .then(() => {
@@ -61,7 +58,6 @@ db.on("reconnected", () => {
   console.log("✅ MongoDB reconnected");
 });
 
-// Schemas
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
   email: { type: String, required: true, unique: true, trim: true },
@@ -119,11 +115,9 @@ const MindMapSchema = new mongoose.Schema({
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 });
 
-// Models
 const User = mongoose.model("User", UserSchema);
 const MindMap = mongoose.model("MindMap", MindMapSchema);
 
-// JWT Authentication Middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
@@ -145,7 +139,6 @@ const authenticateToken = (req, res, next) => {
   );
 };
 
-// Socket.io authentication middleware
 const socketAuth = (socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) {
@@ -166,17 +159,12 @@ const socketAuth = (socket, next) => {
   );
 };
 
-// Apply socket authentication
 io.use(socketAuth);
 
-// Routes
-
-// Auth Routes
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // Validation
     if (!username || !email || !password) {
       return res.status(400).json({ error: "All fields are required" });
     }
@@ -187,7 +175,6 @@ app.post("/api/auth/register", async (req, res) => {
         .json({ error: "Password must be at least 6 characters" });
     }
 
-    // Check if user exists
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
     });
@@ -196,10 +183,8 @@ app.post("/api/auth/register", async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
     const user = new User({
       username,
       email,
@@ -208,7 +193,6 @@ app.post("/api/auth/register", async (req, res) => {
 
     await user.save();
 
-    // Generate token
     const token = jwt.sign(
       { id: user._id, username: user.username },
       process.env.JWT_SECRET || "fallback_secret",
@@ -234,24 +218,20 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    // Find user
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    // Generate token
     const token = jwt.sign(
       { id: user._id, username: user.username },
       process.env.JWT_SECRET || "fallback_secret",
@@ -273,7 +253,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// MindMap Routes
 app.get("/api/mindmaps", authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, search = "", tags = "" } = req.query;
@@ -335,7 +314,6 @@ app.get("/api/mindmaps/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Mind map not found" });
     }
 
-    // Check permissions
     const userId = req.user.id;
     const hasAccess =
       mindmap.owner._id.toString() === userId ||
@@ -361,7 +339,6 @@ app.post("/api/mindmaps", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Title and nodes are required" });
     }
 
-    // Add createdBy field to all nodes
     const processedNodes = nodes.map((node) => ({
       ...node,
       createdBy: req.user.username,
@@ -399,7 +376,6 @@ app.put("/api/mindmaps/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Mind map not found" });
     }
 
-    // Check permissions
     const userId = req.user.id;
     const canEdit =
       mindmap.owner.toString() === userId ||
@@ -415,11 +391,9 @@ app.put("/api/mindmaps/:id", authenticateToken, async (req, res) => {
 
     const { title, description, nodes, links, isPublic, tags } = req.body;
 
-    // Update fields
     if (title) mindmap.title = title;
     if (description !== undefined) mindmap.description = description;
     if (nodes) {
-      // Process nodes to ensure required fields
       const processedNodes = nodes.map((node) => ({
         ...node,
         createdBy: node.createdBy || req.user.username,
@@ -439,7 +413,6 @@ app.put("/api/mindmaps/:id", authenticateToken, async (req, res) => {
     await mindmap.populate("owner", "username email avatar");
     await mindmap.populate("collaborators.user", "username email avatar");
 
-    // Emit update to all connected clients in this room
     io.to(`mindmap:${req.params.id}`).emit("mindmap_updated", mindmap);
 
     res.json(mindmap);
@@ -457,7 +430,6 @@ app.delete("/api/mindmaps/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Mind map not found" });
     }
 
-    // Only owner can delete
     if (mindmap.owner.toString() !== req.user.id) {
       return res.status(403).json({ error: "Only owner can delete mind map" });
     }
@@ -471,7 +443,6 @@ app.delete("/api/mindmaps/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// Comment Routes
 app.post(
   "/api/mindmaps/:id/comments/:nodeId",
   authenticateToken,
@@ -489,7 +460,6 @@ app.post(
         return res.status(404).json({ error: "Mind map not found" });
       }
 
-      // Check permissions
       const userId = req.user.id;
       const hasAccess =
         mindmap.owner.toString() === userId ||
@@ -519,7 +489,6 @@ app.post(
       mindmap.updatedAt = Date.now();
       await mindmap.save();
 
-      // Emit comment to all connected clients in this room
       io.to(`mindmap:${mindmapId}`).emit("comment_added", {
         nodeId,
         comment,
@@ -533,7 +502,6 @@ app.post(
   }
 );
 
-// Collaborator Routes
 app.post(
   "/api/mindmaps/:id/collaborators",
   authenticateToken,
@@ -547,7 +515,6 @@ app.post(
         return res.status(404).json({ error: "Mind map not found" });
       }
 
-      // Only owner can add collaborators
       if (mindmap.owner.toString() !== req.user.id) {
         return res
           .status(403)
@@ -559,7 +526,6 @@ app.post(
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Check if already a collaborator
       const existingCollaborator = mindmap.collaborators.find(
         (c) => c.user.toString() === user._id.toString()
       );
@@ -586,15 +552,13 @@ app.post(
   }
 );
 
-// Socket.io real-time collaboration
-const activeUsers = new Map(); // mindmapId -> Set of users
+const activeUsers = new Map();
 
 io.on("connection", (socket) => {
   console.log(`User ${socket.username} connected`);
 
   socket.on("join_mindmap", async (mindmapId) => {
     try {
-      // Verify user has access to this mindmap
       const mindmap = await MindMap.findById(mindmapId);
       if (!mindmap) {
         socket.emit("error", "Mind map not found");
@@ -616,7 +580,6 @@ io.on("connection", (socket) => {
       socket.join(`mindmap:${mindmapId}`);
       socket.currentMindmap = mindmapId;
 
-      // Track active users
       if (!activeUsers.has(mindmapId)) {
         activeUsers.set(mindmapId, new Set());
       }
@@ -625,13 +588,11 @@ io.on("connection", (socket) => {
         username: socket.username,
       });
 
-      // Notify others of new user
       socket.to(`mindmap:${mindmapId}`).emit("user_joined", {
         id: socket.userId,
         username: socket.username,
       });
 
-      // Send current active users to the new user
       const users = Array.from(activeUsers.get(mindmapId));
       socket.emit("active_users", users);
     } catch (error) {
@@ -646,14 +607,12 @@ io.on("connection", (socket) => {
     try {
       const { nodeId, updates } = data;
 
-      // Broadcast to others in the room
       socket.to(`mindmap:${socket.currentMindmap}`).emit("node_updated", {
         nodeId,
         updates,
         updatedBy: socket.username,
       });
 
-      // Update in database
       const mindmap = await MindMap.findById(socket.currentMindmap);
       if (mindmap) {
         const nodeIndex = mindmap.nodes.findIndex((n) => n.id === nodeId);
@@ -694,7 +653,6 @@ io.on("connection", (socket) => {
         if (mindmapUsers.size === 0) {
           activeUsers.delete(socket.currentMindmap);
         } else {
-          // Notify others of user leaving
           socket.to(`mindmap:${socket.currentMindmap}`).emit("user_left", {
             id: socket.userId,
             username: socket.username,
@@ -705,7 +663,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({
     status: "OK",
@@ -714,13 +671,11 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Something went wrong!" });
 });
 
-// 404 handler
 app.use("*", (req, res) => {
   res.status(404).json({ error: "Route not found" });
 });

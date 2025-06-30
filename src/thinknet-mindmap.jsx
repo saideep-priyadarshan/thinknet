@@ -44,7 +44,7 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
   const [collaborators, setCollaborators] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
   const [draggedNode, setDraggedNode] = useState(null);
-  const [loading, setLoading] = useState(false); // Change to false by default for new mind maps
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showCollaboratorModal, setShowCollaboratorModal] = useState(false);
   const [newCollaboratorUsername, setNewCollaboratorUsername] = useState("");
@@ -52,7 +52,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleText, setEditTitleText] = useState("");
 
-  // Auto-save timer
   const saveTimeoutRef = useRef();
   const hasUnsavedChanges = useRef(false);
 
@@ -69,7 +68,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
 
   const simulation = useRef();
 
-  // Define event handlers outside useEffect so they're stable
   const handleNodeClick = useCallback((event, d) => {
     event.stopPropagation();
     setSelectedNode(d);
@@ -83,23 +81,19 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     setEditText(d.text);
   }, []);
 
-  // Initialize D3 visualization once
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) {
       return;
     }
 
-    // Get container dimensions
     const containerRect = containerRef.current.getBoundingClientRect();
     const width = containerRect.width || 800;
     const height = containerRect.height || 600;
 
     const svg = d3.select(svgRef.current);
 
-    // Set SVG dimensions
     svg.attr("width", width).attr("height", height);
 
-    // Create gradient definitions only once
     const defs = svg.append("defs");
     colorPalette.forEach((color, i) => {
       const gradient = defs
@@ -116,10 +110,8 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       gradient.append("stop").attr("offset", "100%").attr("stop-color", color);
     });
 
-    // Create main container group
     svg.append("g").attr("class", "main-container");
 
-    // Add zoom behavior
     const zoom = d3
       .zoom()
       .scaleExtent([0.1, 4])
@@ -129,20 +121,17 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
 
     svg.call(zoom);
 
-    // Handle container clicks to deselect nodes
     svg.on("click", () => {
       setSelectedNode(null);
       setShowComments(null);
     });
-  }, []); // Run only once
+  }, []);
 
-  // Update D3 visualization when data changes
   useEffect(() => {
     if (!svgRef.current || nodes.length === 0) {
       return;
     }
 
-    // Get container dimensions
     const containerRect = containerRef.current.getBoundingClientRect();
     const width = containerRect.width || 800;
     const height = containerRect.height || 600;
@@ -150,11 +139,9 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     const svg = d3.select(svgRef.current);
     const container = svg.select(".main-container");
 
-    // Clear previous data elements
     container.selectAll(".links").remove();
     container.selectAll(".nodes").remove();
 
-    // Create force simulation
     simulation.current = d3
       .forceSimulation(nodes)
       .force(
@@ -168,7 +155,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius(40));
 
-    // Create links
     const linkGroup = container.append("g").attr("class", "links");
     const link = linkGroup
       .selectAll("line")
@@ -179,7 +165,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       .attr("stroke-width", 2)
       .attr("stroke-opacity", 0.6);
 
-    // Create nodes
     const nodeGroup = container.append("g").attr("class", "nodes");
 
     const node = nodeGroup
@@ -190,7 +175,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       .attr("class", "node")
       .style("cursor", "pointer");
 
-    // Add circles for nodes
     node
       .append("circle")
       .attr("r", (d) => 20 + d.level * 5)
@@ -204,7 +188,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       .on("click", handleNodeClick)
       .on("dblclick", handleNodeDoubleClick);
 
-    // Add text labels
     node
       .append("text")
       .text((d) => d.text)
@@ -216,7 +199,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       .style("pointer-events", "none")
       .style("text-shadow", "0 1px 2px rgba(0,0,0,0.5)");
 
-    // Add comment indicators
     node
       .filter((d) => comments[d.id] && comments[d.id].length > 0)
       .append("circle")
@@ -227,7 +209,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       .attr("stroke", "#ffffff")
       .attr("stroke-width", 2);
 
-    // Drag behavior functions
     function dragstarted(event, d) {
       if (!event.active) simulation.current.alphaTarget(0.3).restart();
       d.fx = d.x;
@@ -247,7 +228,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       setDraggedNode(null);
     }
 
-    // Add drag behavior
     const drag = d3
       .drag()
       .on("start", dragstarted)
@@ -256,7 +236,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
 
     node.call(drag);
 
-    // Update positions on simulation tick
     simulation.current.on("tick", () => {
       link
         .attr("x1", (d) => d.source.x)
@@ -267,7 +246,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
     });
 
-    // Clean up on unmount
     return () => {
       if (simulation.current) {
         simulation.current.stop();
@@ -275,7 +253,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     };
   }, [nodes, links, comments]);
 
-  // Load mind map data
   useEffect(() => {
     const loadMindMap = async () => {
       if (mindMapId) {
@@ -286,10 +263,8 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
 
           setMindMap(mindMapData);
 
-          // Ensure nodes have proper positioning and clean data for D3
           const loadedNodes = mindMapData.nodes || [];
           if (loadedNodes.length === 0) {
-            // If no nodes, use default
             setNodes([
               {
                 id: "root",
@@ -301,7 +276,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
               },
             ]);
           } else {
-            // Clean loaded nodes to only include fields D3.js expects
             const cleanedNodes = loadedNodes.map((node) => ({
               id: node.id,
               x: node.x,
@@ -309,12 +283,10 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
               text: node.text,
               level: node.level,
               color: node.color,
-              // Remove database fields like _id, createdBy, createdAt, updatedAt
             }));
             setNodes(cleanedNodes);
           }
 
-          // Clean links to ensure they only have source and target IDs
           const loadedLinks = mindMapData.links || [];
           const cleanedLinks = loadedLinks.map((link) => ({
             source:
@@ -325,7 +297,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
           setLinks(cleanedLinks);
           setIsPrivate(!mindMapData.isPublic);
 
-          // Convert comments Map to object
           const commentsObj = {};
           if (mindMapData.comments) {
             for (const [nodeId, nodeComments] of Object.entries(
@@ -338,7 +309,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
 
           setCollaborators(mindMapData.collaborators || []);
 
-          // Join the mindmap room for real-time collaboration
           socketService.joinMindMap(mindMapId);
         } catch (error) {
           console.error("Failed to load mind map:", error);
@@ -346,19 +316,16 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
           setLoading(false);
         }
       } else {
-        // For new mind maps, just use the default state
         if (initialData) {
           setNodes(initialData.nodes || nodes);
           setLinks(initialData.links || links);
         }
-        // No need to setLoading(false) since it's already false by default
       }
     };
 
     loadMindMap();
   }, [mindMapId]);
 
-  // Socket event listeners
   useEffect(() => {
     const handleNodeUpdated = ({ nodeId, updates, updatedBy }) => {
       if (updatedBy !== user.username) {
@@ -400,7 +367,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     };
   }, [user.username]);
 
-  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
@@ -409,7 +375,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     };
   }, []);
 
-  // Auto-save functionality
   const scheduleAutoSave = useCallback(() => {
     hasUnsavedChanges.current = true;
 
@@ -421,18 +386,15 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       if (hasUnsavedChanges.current && mindMapId) {
         await saveMindMap();
       }
-    }, 2000); // Auto-save after 2 seconds of inactivity
+    }, 2000);
   }, [mindMapId]);
 
   const saveMindMap = useCallback(async () => {
-    // Allow saving for new mind maps (when both mindMap and mindMapId are null)
-    // Only return early if we have no nodes to save
     if (nodes.length === 0) return;
 
     try {
       setSaving(true);
 
-      // Clean nodes and links for database storage
       const cleanNodes = nodes.map((node) => ({
         id: node.id,
         x: node.x,
@@ -440,7 +402,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
         text: node.text,
         level: node.level,
         color: node.color,
-        // Remove D3-added properties like index, vx, vy, fx, fy
       }));
 
       const cleanLinks = links.map((link) => ({
@@ -462,7 +423,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       } else {
         const response = await mindMapAPI.create(mindMapData);
         setMindMap(response.data);
-        // Note: mindMapId prop can't be updated from here since it's passed from parent
         console.log("Mind map created:", response.data);
       }
 
@@ -470,7 +430,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       setLastSaved(new Date());
     } catch (error) {
       console.error("Failed to save mind map:", error);
-      // Show user-friendly error message
       alert(
         "Failed to save mind map. Please check your connection and try again."
       );
@@ -489,17 +448,14 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     if (!confirmDelete) return;
 
     try {
-      // Clear any pending auto-save to prevent save attempts after deletion
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = null;
       }
 
-      // Mark as no unsaved changes to prevent any save attempts
       hasUnsavedChanges.current = false;
 
       await mindMapAPI.delete(mindMapId);
-      // Navigate back to dashboard after successful deletion
       onBack();
     } catch (error) {
       console.error("Failed to delete mind map:", error);
@@ -524,13 +480,11 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     }
 
     try {
-      // Update local state immediately for better UX
       setMindMap((prev) =>
         prev ? { ...prev, title: editTitleText.trim() } : null
       );
       setIsEditingTitle(false);
 
-      // Schedule auto-save to save the title change
       scheduleAutoSave();
     } catch (error) {
       console.error("Failed to update title:", error);
@@ -549,7 +503,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     [saveTitle, cancelEditingTitle]
   );
 
-  // Trigger auto-save when data changes
   useEffect(() => {
     if (!loading) {
       scheduleAutoSave();
@@ -577,7 +530,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     setLinks((prev) => [...prev, newLink]);
     setSelectedNode(newNode);
 
-    // Emit update to other users
     socketService.updateNode(newNode.id, newNode);
   }, [selectedNode, colorPalette]);
 
@@ -604,14 +556,12 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     setIsEditing(false);
     setEditText("");
 
-    // Emit update to other users
     socketService.updateNode(selectedNode.id, { text: editText });
   }, [selectedNode, editText, nodes]);
   const addComment = useCallback(async () => {
     if (!selectedNode || !newComment.trim()) return;
 
     try {
-      // For new mind maps (no mindMapId), handle comments locally
       if (!mindMapId) {
         const comment = {
           id: Date.now(),
@@ -626,13 +576,11 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
         }));
         setNewComment("");
 
-        // Mark as having unsaved changes to encourage saving
         hasUnsavedChanges.current = true;
         scheduleAutoSave();
         return;
       }
 
-      // For existing mind maps with valid ID, use API
       const response = await mindMapAPI.addComment(mindMapId, selectedNode.id, {
         text: newComment.trim(),
       });
@@ -645,7 +593,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       setNewComment("");
     } catch (error) {
       console.error("Failed to add comment:", error);
-      // Fallback to local comment if API fails
       const comment = {
         id: Date.now(),
         text: newComment.trim(),
@@ -664,7 +611,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
     if (!newCollaboratorUsername.trim()) return;
 
     try {
-      // If this is a new mind map (no mindMapId), save it first
       if (!mindMapId) {
         alert("Please save the mind map first before adding collaborators.");
         return;
@@ -723,7 +669,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
       <div className="bg-black/20 backdrop-blur-sm border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -834,7 +779,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
                 <span>Save</span>
               </button>
 
-              {/* Delete button - only show for saved mind maps owned by current user */}
               {mindMapId &&
                 mindMap &&
                 mindMap.owner &&
@@ -854,11 +798,9 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
       </div>
 
       <div className="flex h-[calc(100vh-4rem)]">
-        {/* Main Canvas */}
         <div className="flex-1 relative" ref={containerRef}>
           <svg ref={svgRef} className="w-full h-full bg-transparent" />
 
-          {/* Floating Toolbar */}
           {selectedNode && (
             <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm rounded-xl p-3 border border-white/10">
               <div className="flex items-center space-x-2 mb-2">
@@ -922,7 +864,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
             </div>
           )}
 
-          {/* Collaborator Modal */}
           {showCollaboratorModal && (
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-600 max-w-md w-full mx-4">
@@ -957,7 +898,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
             </div>
           )}
 
-          {/* Edit Modal */}
           {isEditing && (
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-600 max-w-md w-full mx-4">
@@ -992,7 +932,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
             </div>
           )}
 
-          {/* Title Edit Modal */}
           {isEditingTitle && (
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-600 max-w-md w-full mx-4">
@@ -1003,7 +942,7 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
                   type="text"
                   value={editTitleText}
                   onChange={(e) => setEditTitleText(e.target.value)}
-                  onKeyPress={handleTitleKeyPress}
+                  onKeyDown={handleTitleKeyPress}
                   className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
                   placeholder="Enter mind map title..."
                   autoFocus
@@ -1028,7 +967,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
           )}
         </div>
 
-        {/* Comments Panel */}
         {showComments && (
           <div className="w-80 bg-black/20 backdrop-blur-sm border-l border-white/10 p-4">
             <div className="flex items-center justify-between mb-4">
@@ -1081,7 +1019,6 @@ const ThinkNet = ({ mindMapId, onBack, initialData = null }) => {
         )}
       </div>
 
-      {/* Instructions */}
       <div className="absolute bottom-4 right-4 bg-black/40 backdrop-blur-sm rounded-lg p-3 text-white text-sm max-w-xs">
         <p className="font-medium mb-2">Quick Guide:</p>
         <ul className="space-y-1 text-xs text-gray-300">

@@ -44,7 +44,6 @@ class SocketService {
     }
   }
 
-  // MindMap collaboration methods
   joinMindMap(mindmapId) {
     if (this.socket) {
       this.socket.emit("join_mindmap", mindmapId);
@@ -63,7 +62,6 @@ class SocketService {
     }
   }
 
-  // Event listeners
   onMindMapUpdated(callback) {
     if (this.socket) {
       this.socket.on("mindmap_updated", callback);
@@ -106,7 +104,6 @@ class SocketService {
     }
   }
 
-  // Remove all listeners
   removeAllListeners() {
     if (this.socket) {
       this.socket.removeAllListeners();

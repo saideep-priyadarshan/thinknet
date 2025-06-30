@@ -1,9 +1,4 @@
-// Note: Netlify Functions don't support persistent WebSocket connections
-// This is a placeholder that returns connection info
-// For real-time features, consider using services like Pusher, Ably, or Socket.io with a separate service
-
 exports.handler = async (event, context) => {
-  // Handle preflight requests
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,

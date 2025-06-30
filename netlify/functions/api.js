@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// MongoDB connection with connection pooling
 let cachedDb = null;
 
 async function connectToDatabase() {
@@ -29,7 +28,6 @@ async function connectToDatabase() {
   }
 }
 
-// Schemas
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, trim: true },
   email: { type: String, required: true, unique: true, trim: true },
@@ -87,11 +85,9 @@ const MindMapSchema = new mongoose.Schema({
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 });
 
-// Models
 const User = mongoose.model("User", UserSchema);
 const MindMap = mongoose.model("MindMap", MindMapSchema);
 
-// JWT Authentication Helper
 const authenticateToken = (authHeader) => {
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -109,7 +105,6 @@ const authenticateToken = (authHeader) => {
   }
 };
 
-// Helper function to create response
 const createResponse = (statusCode, body, headers = {}) => {
   return {
     statusCode,
@@ -124,17 +119,13 @@ const createResponse = (statusCode, body, headers = {}) => {
   };
 };
 
-// Main handler
 exports.handler = async (event, context) => {
-  // Handle preflight requests
   if (event.httpMethod === "OPTIONS") {
     return createResponse(200, {});
   }
 
-  // Get the path and remove the function prefix
   let path = event.path.replace("/.netlify/functions/api", "");
 
-  // Also handle if the request comes through the redirect from /api/*
   if (path.startsWith("/api")) {
     path = path.replace("/api", "");
   }
@@ -144,7 +135,6 @@ exports.handler = async (event, context) => {
   try {
     await connectToDatabase();
 
-    // Route: Health Check
     if (path === "/health" && method === "GET") {
       return createResponse(200, {
         status: "OK",
@@ -152,11 +142,9 @@ exports.handler = async (event, context) => {
       });
     }
 
-    // Route: Register
     if (path === "/auth/register" && method === "POST") {
       const { username, email, password } = JSON.parse(event.body || "{}");
 
-      // Validation
       if (!username || !email || !password) {
         return createResponse(400, { error: "All fields are required" });
       }
@@ -167,7 +155,6 @@ exports.handler = async (event, context) => {
         });
       }
 
-      // Check if user exists
       const existingUser = await User.findOne({
         $or: [{ email }, { username }],
       });
@@ -176,10 +163,8 @@ exports.handler = async (event, context) => {
         return createResponse(400, { error: "User already exists" });
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 12);
 
-      // Create user
       const user = new User({
         username,
         email,
@@ -188,7 +173,6 @@ exports.handler = async (event, context) => {
 
       await user.save();
 
-      // Generate token
       const token = jwt.sign(
         { id: user._id, username: user.username },
         process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
@@ -206,30 +190,25 @@ exports.handler = async (event, context) => {
       });
     }
 
-    // Route: Login
     if (path === "/auth/login" && method === "POST") {
       const { email, password } = JSON.parse(event.body || "{}");
 
-      // Validation
       if (!email || !password) {
         return createResponse(400, {
           error: "Email and password are required",
         });
       }
 
-      // Find user
       const user = await User.findOne({ email });
       if (!user) {
         return createResponse(400, { error: "Invalid credentials" });
       }
 
-      // Check password
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         return createResponse(400, { error: "Invalid credentials" });
       }
 
-      // Generate token
       const token = jwt.sign(
         { id: user._id, username: user.username },
         process.env.JWT_SECRET || process.env.VITE_JWT_SECRET,
@@ -247,7 +226,6 @@ exports.handler = async (event, context) => {
       });
     }
 
-    // Route: Get Mindmaps
     if (path === "/mindmaps" && method === "GET") {
       const authUser = authenticateToken(event.headers.authorization);
 
@@ -265,7 +243,6 @@ exports.handler = async (event, context) => {
       return createResponse(200, { mindmaps });
     }
 
-    // Route: Create Mindmap
     if (path === "/mindmaps" && method === "POST") {
       const authUser = authenticateToken(event.headers.authorization);
       const { title, description, isPublic, tags } = JSON.parse(
@@ -294,7 +271,6 @@ exports.handler = async (event, context) => {
       return createResponse(201, mindmap);
     }
 
-    // Route: Get specific mindmap
     if (path.match(/^\/mindmaps\/[a-f\d]{24}$/) && method === "GET") {
       const authUser = authenticateToken(event.headers.authorization);
       const mindmapId = path.split("/")[2];
@@ -307,7 +283,6 @@ exports.handler = async (event, context) => {
         return createResponse(404, { error: "Mind map not found" });
       }
 
-      // Check permissions
       const hasAccess =
         mindmap.owner._id.toString() === authUser.id ||
         mindmap.collaborators.some(
@@ -322,7 +297,6 @@ exports.handler = async (event, context) => {
       return createResponse(200, mindmap);
     }
 
-    // Route: Update mindmap
     if (path.match(/^\/mindmaps\/[a-f\d]{24}$/) && method === "PUT") {
       const authUser = authenticateToken(event.headers.authorization);
       const mindmapId = path.split("/")[2];
@@ -336,7 +310,6 @@ exports.handler = async (event, context) => {
         return createResponse(404, { error: "Mind map not found" });
       }
 
-      // Check permissions
       const hasWriteAccess =
         mindmap.owner.toString() === authUser.id ||
         mindmap.collaborators.some(
@@ -349,7 +322,6 @@ exports.handler = async (event, context) => {
         return createResponse(403, { error: "Write access denied" });
       }
 
-      // Update fields
       if (nodes !== undefined) mindmap.nodes = nodes;
       if (links !== undefined) mindmap.links = links;
       if (title !== undefined) mindmap.title = title;
@@ -367,7 +339,6 @@ exports.handler = async (event, context) => {
       return createResponse(200, mindmap);
     }
 
-    // Route: Delete mindmap
     if (path.match(/^\/mindmaps\/[a-f\d]{24}$/) && method === "DELETE") {
       const authUser = authenticateToken(event.headers.authorization);
       const mindmapId = path.split("/")[2];
@@ -378,7 +349,6 @@ exports.handler = async (event, context) => {
         return createResponse(404, { error: "Mind map not found" });
       }
 
-      // Only owner can delete
       if (mindmap.owner.toString() !== authUser.id) {
         return createResponse(403, { error: "Only owner can delete mind map" });
       }
@@ -387,7 +357,6 @@ exports.handler = async (event, context) => {
       return createResponse(200, { message: "Mind map deleted successfully" });
     }
 
-    // If no route matches
     return createResponse(404, { error: "Route not found" });
   } catch (error) {
     console.error("API Error:", error);
